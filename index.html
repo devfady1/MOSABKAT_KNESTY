@@ -339,6 +339,9 @@
       <div style="margin-top:20px;text-align:center;opacity:0.8">
         💡 يمكنك إضافة فريقين أو أكثر • الأسئلة لن تتكرر • المسابقة تحتوي على 20 سؤال
       </div>
+      <div style="margin-top:15px;text-align:center">
+        <button class="danger" onclick="clearAllData()" style="font-size:0.9rem;padding:8px 15px">🗑️ مسح كل البيانات المحفوظة</button>
+      </div>
     </div>
 
     <!-- شاشة اللعب -->
@@ -402,9 +405,11 @@
             <div id="scores"></div>
             <hr style="margin:20px 0;opacity:0.2" />
             <div style="text-align:center">
-              <button class="danger" onclick="endGame()" style="width:100%">🏁 إنهاء المسابقة</button>
+              <button onclick="saveManually()" style="width:100%;background:var(--success)">💾 حفظ اللعبة</button>
+              <button class="danger" onclick="endGame()" style="width:100%;margin-top:10px">🏁 إنهاء المسابقة</button>
               <button class="secondary" onclick="resetGame()" style="width:100%;margin-top:10px">🔄 بداية جديدة</button>
             </div>
+            <div id="saveStatus" style="margin-top:10px;text-align:center;font-size:0.9rem;opacity:0.8"></div>
           </div>
         </aside>
       </div>
@@ -469,6 +474,95 @@
     let questionCount = 0;
     let selectedAnswer = null;
 
+    // استرجاع البيانات المحفوظة عند تحميل الصفحة
+    window.addEventListener('load', () => {
+      loadGameState();
+    });
+
+    // حفظ حالة اللعبة في Local Storage
+    function saveGameState() {
+      const gameState = {
+        teams: teams,
+        scores: scores,
+        currentTeamIndex: currentTeamIndex,
+        usedQuestions: Array.from(usedQuestions),
+        questionCount: questionCount,
+        timestamp: new Date().toISOString()
+      };
+      localStorage.setItem('quizGameState', JSON.stringify(gameState));
+    }
+
+    // استرجاع حالة اللعبة من Local Storage
+    function loadGameState() {
+      const savedState = localStorage.getItem('quizGameState');
+      if (savedState) {
+        try {
+          const state = JSON.parse(savedState);
+          
+          // عرض رسالة للمستخدم
+          const lastSave = new Date(state.timestamp);
+          const timeAgo = getTimeAgo(lastSave);
+          
+          if (confirm(`🔄 توجد لعبة محفوظة من ${timeAgo}\n\nالفرق: ${state.teams.join(', ')}\nعدد الأسئلة المجابة: ${state.usedQuestions.length}\n\nهل تريد استكمال اللعبة السابقة؟`)) {
+            // استرجاع البيانات
+            teams = state.teams || [];
+            scores = state.scores || {};
+            currentTeamIndex = state.currentTeamIndex || 0;
+            usedQuestions = new Set(state.usedQuestions || []);
+            questionCount = state.questionCount || 0;
+            
+            // إذا كانت هناك فرق، اعرضها
+            if (teams.length > 0) {
+              renderTeams();
+              if (teams.length >= 2) {
+                document.getElementById('startBtn').style.display = 'inline-block';
+              }
+              
+              // إذا كانت اللعبة قد بدأت
+              if (usedQuestions.size > 0) {
+                document.getElementById('setup').classList.add('hidden');
+                document.getElementById('game').classList.remove('hidden');
+                updateTurnDisplay();
+                renderScores();
+                document.getElementById('qNum').textContent = questionCount;
+                document.getElementById('remaining').textContent = `الأسئلة المتبقية: ${20 - usedQuestions.size}`;
+              }
+            }
+          } else {
+            // المستخدم اختار عدم الاستكمال
+            clearGameState();
+          }
+        } catch (e) {
+          console.error('خطأ في استرجاع البيانات:', e);
+          clearGameState();
+        }
+      }
+    }
+
+    // حساب الوقت المنقضي
+    function getTimeAgo(date) {
+      const seconds = Math.floor((new Date() - date) / 1000);
+      
+      if (seconds < 60) return 'قبل ثوانٍ';
+      const minutes = Math.floor(seconds / 60);
+      if (minutes < 60) return `قبل ${minutes} دقيقة`;
+      const hours = Math.floor(minutes / 60);
+      if (hours < 24) return `قبل ${hours} ساعة`;
+      const days = Math.floor(hours / 24);
+      return `قبل ${days} يوم`;
+    }
+
+    // مسح البيانات المحفوظة
+    function clearGameState() {
+      localStorage.removeItem('quizGameState');
+      teams = [];
+      scores = {};
+      currentTeamIndex = 0;
+      usedQuestions = new Set();
+      questionCount = 0;
+      selectedAnswer = null;
+    }
+
     // وظائف إدارة الفرق
     function addTeam() {
       const input = document.getElementById('teamName');
@@ -492,6 +586,9 @@
       if (teams.length >= 2) {
         document.getElementById('startBtn').style.display = 'inline-block';
       }
+      
+      // حفظ الحالة
+      saveGameState();
     }
 
     function removeTeam(name) {
@@ -502,6 +599,9 @@
       if (teams.length < 2) {
         document.getElementById('startBtn').style.display = 'none';
       }
+      
+      // حفظ الحالة
+      saveGameState();
     }
 
     function renderTeams() {
@@ -529,6 +629,9 @@
       currentTeamIndex = 0;
       updateTurnDisplay();
       renderScores();
+      
+      // حفظ الحالة
+      saveGameState();
     }
 
     // اختيار القسم
@@ -568,6 +671,9 @@
       const randomIndex = Math.floor(Math.random() * availableQuestions.length);
       const question = availableQuestions[randomIndex];
       usedQuestions.add(question.id);
+      
+      // حفظ الحالة بعد سحب سؤال جديد
+      saveGameState();
       
       return question;
     }
@@ -639,6 +745,9 @@
       }
       
       renderScores();
+      
+      // حفظ الحالة بعد كل إجابة
+      saveGameState();
       document.getElementById('nextBtn').classList.remove('hidden');
       
       if (usedQuestions.size >= 20) {
@@ -651,6 +760,9 @@
       document.getElementById('feedback').innerHTML = '';
       currentTeamIndex = (currentTeamIndex + 1) % teams.length;
       updateTurnDisplay();
+      
+      // حفظ الحالة
+      saveGameState();
       
       document.getElementById('categorySelector').classList.remove('hidden');
       document.getElementById('questionDisplay').classList.add('hidden');
@@ -747,9 +859,45 @@
     // إعادة تعيين اللعبة
     function resetGame() {
       if (confirm('⚠️ هل تريد بدء مسابقة جديدة؟ سيتم مسح كل التقدم الحالي.')) {
+        clearGameState();
         location.reload();
       }
     }
+    
+    // مسح كل البيانات
+    function clearAllData() {
+      if (confirm('⚠️ هل أنت متأكد من مسح كل البيانات المحفوظة؟\n\nسيتم مسح:\n• جميع الفرق المسجلة\n• النقاط\n• تقدم اللعبة الحالي')) {
+        clearGameState();
+        alert('✅ تم مسح جميع البيانات المحفوظة بنجاح');
+        location.reload();
+      }
+    }
+    
+    // حفظ يدوي
+    function saveManually() {
+      saveGameState();
+      showSaveStatus('✅ تم حفظ اللعبة بنجاح');
+    }
+    
+    // عرض حالة الحفظ
+    function showSaveStatus(message) {
+      const statusDiv = document.getElementById('saveStatus');
+      if (statusDiv) {
+        statusDiv.textContent = message;
+        statusDiv.style.color = 'var(--success)';
+        setTimeout(() => {
+          statusDiv.textContent = '';
+        }, 3000);
+      }
+    }
+    
+    // حفظ تلقائي كل دقيقة
+    setInterval(() => {
+      if (teams.length > 0 && document.getElementById('game').classList.contains('hidden') === false) {
+        saveGameState();
+        showSaveStatus('💾 حفظ تلقائي');
+      }
+    }, 60000); // كل 60 ثانية
   </script>
 </body>
 </html>
